@@ -4,6 +4,7 @@ import pandas as pd
 import requests
 import plotly.express as px
 from datetime import datetime
+import numpy as np
 
 # 페이지 설정 - 모바일 최적화
 st.set_page_config(
@@ -50,9 +51,13 @@ def get_weather():
     try:
         url = f"http://api.openweathermap.org/data/2.5/weather?q=Seoul&appid={secrets['WEATHER_API_KEY']}&units=metric&lang=ko"
         resp = requests.get(url, timeout=5).json()
-        return resp['main']['temp'], resp['weather'][0]['description']
+        return {
+            'temp': resp['main']['temp'],
+            'humidity': resp['main']['humidity'],
+            'desc': resp['weather'][0]['description']
+        }
     except:
-        return None, None
+        return None
 
 def parse_time(time_str):
     if pd.isna(time_str) or time_str == '0:00:00': return 0
@@ -68,12 +73,12 @@ def parse_time(time_str):
 st.title("🏃‍♂️ 런닝 대시보드")
 
 # 현재 날씨
-temp, desc = get_weather()
+weather_data = get_weather()
 col1, col2, col3 = st.columns(3)
-if temp:
-    col1.metric("🌡️ 서울", f"{temp}°C")
-    col2.metric("💧", f"{int(resp['main']['humidity'])}%")
-    col3.metric("☁️", desc)
+if weather_data:
+    col1.metric("🌡️ 서울", f"{weather_data['temp']}°C")
+    col2.metric("💧", f"{weather_data['humidity']}%")
+    col3.metric("☁️", weather_data['desc'])
 
 st.markdown("---")
 
@@ -83,6 +88,7 @@ try:
     if df.empty:
         st.warning("⚠️ 노션 데이터베이스에 런닝 기록이 없습니다.")
         st.stop()
+    st.success(f"✅ {len(df)}개 런닝 기록 로드 완료!")
 except Exception as e:
     st.error(f"❌ 데이터 로드 실패: {str(e)[:100]}")
     st.stop()
@@ -92,7 +98,7 @@ recent_df = df.tail(30).copy()
 recent_df['시간_초'] = recent_df['시간'].apply(parse_time)
 recent_df['페이스_분km'] = recent_df['시간_초'] / (recent_df['거리(km)'] * 60)
 
-# 2x2 통계 카드 (모바일 최적화)
+# 2x2 통계 카드
 col1, col2 = st.columns(2)
 col3, col4 = st.columns(2)
 
@@ -135,21 +141,20 @@ st.dataframe(
 )
 
 # 상태별 파이차트
-if '상태' in recent_df.columns:
+if '상태' in recent_df.columns and len(recent_df['상태'].value_counts()) > 1:
     st.markdown("### 🎯 상태분포")
     status_counts = recent_df['상태'].value_counts()
     fig_pie = px.pie(values=status_counts.values, names=status_counts.index)
     fig_pie.update_layout(height=350)
     st.plotly_chart(fig_pie, use_container_width=True)
 
-# 모바일 CSS 최적화
+# 모바일 CSS
 st.markdown("""
 <style>
     [data-testid="stSidebar"] { display: none !important; }
-    .main .block-container { padding: 1rem 1rem; }
+    .main .block-container { padding: 1rem; }
     @media (max-width: 768px) {
         .main .block-container { padding: 0.5rem; }
-        section[data-testid="stHorizontalBlock"] { flex-direction: column !important; }
     }
 </style>
 """, unsafe_allow_html=True)
